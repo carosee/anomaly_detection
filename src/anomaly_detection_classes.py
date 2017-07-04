@@ -3,26 +3,21 @@ from collections import OrderedDict
 import numpy as np
 import heapq
 
-# class Purchase:
-# 	def __init__(self, timestamp, id, amount):
-# 		self.timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-# 		self.id = id
-# 		self.amount = amount
-
 class Social_Network:
+
 	def __init__(self, d, t):
 		'''
 		Initialize a social network object to check for anomalous purchases.
 
 		d = number of degrees in social network to check
-		t = number of purchases to check
+		t = number of historical purchases to check
 		'''
 		self.d = d
 		self.t = t
-		self.id_to_user = {}
+		self.id_to_user = {} # dictionary of integer ids to User objects
 
 
-	# process individual events streaming in from a json file
+	### Fns to process individual events streaming in from a json file
 
 	def add_initial_event(self, event_dict):
 		'''
@@ -39,10 +34,10 @@ class Social_Network:
 		elif event_type == 'unfriend':
 			self.add_unfriend(event_dict)
 		else:
-			print ("ERROR")
+			raise ValueError("Unknown event type", event_type)
 
 
-	def add_streaming_event(self, event_dict): # t and d not needed as parameters anymore
+	def add_streaming_event(self, event_dict):
 		'''
 		Add in a streaming event from the stream log to this network.
 		Check if this event is an anomalous purchase.
@@ -71,14 +66,17 @@ class Social_Network:
 		elif event_type == 'unfriend':
 			self.add_unfriend(event_dict)
 		else:
-			print ("ERROR")
+			raise ValueError("Unknown event type", event_type)
 
 
-	# fns to update network based on different events
+	### Fns to update network based on different events
 
 	def add_purchase(self, event_dict):
 		'''
 		Update network state with purchase event.
+
+		event_dict: Dictionary of parsed json representing purchase event.
+		return: None
 		'''
 		# update user information
 		id = event_dict['id']
@@ -100,6 +98,9 @@ class Social_Network:
 	def add_befriend(self, event_dict):
 		'''
 		Update network state with befriend event.
+
+		event_dict: Dictionary of parsed json representing befriend event.
+		return: None
 		'''
 		id1 = event_dict['id1']
 		id2 = event_dict['id2']
@@ -123,6 +124,9 @@ class Social_Network:
 	def add_unfriend(self, event_dict):
 		'''
 		Update network state with unfriend event.
+
+		event_dict: Dictionary of parsed json representing unfriend event.
+		return: None
 		'''
 		id1 = event_dict['id1']
 		id2 = event_dict['id2']
@@ -134,40 +138,14 @@ class Social_Network:
 		return user1, user2
 
 
-	# fns to check for anomalies
+	### Fns used to check for anomalies
 
-	def is_anomaly(self, event): # don't need t and d as parameters anymore
-		'''
-		Check if a given event is anomalous given self.t and self.d.
-		An event is anolalous if ...
-		Events for which the network has fewer than 2 purchases are not flagged
-		 as anomalous.
-
-		event: Dictionary
-		return: Tuple of average and std of previous events if the event is
-		 anomalous; False if the event is not anomalous.
-		'''
-		id = event['id']
-		amount = float(event['amount'])
-		user = self.id_to_user[id]
-		friends_list = self.get_friends_list(id)
-		purchases = self.get_purchases(friends_list)
-		if len(purchases) >= 2:
-			amounts = [float(n) for _, _, n in purchases]
-			avg = np.mean(amounts)
-			std = np.std(amounts)
-			cutoff = avg + 3 * std
-			if amount > cutoff:
-				return (avg, std)
-		return False
-
-
-	def get_friends_list(self, user): # d no longer needed as parameter.
+	def get_friends_list(self, user):
 		'''
 		Gets the list of all friends in a user's dth degree network, where d is
 		 defined by self.d, the degree of the network.
-		user: integer id of user to get friends list from.
 
+		user: integer id of user to get friends list from.
 		return: list of all integer ids of people in user's dth degree network
 		'''
 		# breadth first search
@@ -185,13 +163,15 @@ class Social_Network:
 		friends_list.remove(user)
 		return friends_list
 
-	def get_purchases(self, friends_list): #no longer need t as parameter
+
+	def get_purchases(self, friends_list):
 		'''
-		Gets the t most recent purchases out of the users in friends_list
+		Gets the most recent purchases out of the users in friends_list,
+		 where self.t is the number of purchases to consider.
 
 		friends_list: a list of integer ids of users in the network.
-		return: a list of tuples of (timestamp, amount) for the t most recent
-		 purchases in the network.
+		return: a list of tuples of (timestamp, rank, amount) for the t most
+		 recent purchases in the network.
 		'''
 		p = []
 		for friend in friends_list:
@@ -199,12 +179,39 @@ class Social_Network:
 		return heapq.nlargest(self.t, p)
 
 
+	def is_anomaly(self, purchase_event):
+		'''
+		Check if a given purchase is anomalous given self.t and self.d.
+		An event is anolalous if it is more than 3 standard devations above the
+		 mean of the last t purchases in the users dth degree social network.
+		Events for which the network has fewer than 2 purchases are not flagged
+		 as anomalous.
+
+		event: Dictionary representing parsed json event.
+		return: Tuple of average and std of previous events if the event is
+		 anomalous; False if the event is not anomalous.
+		'''
+		id = purchase_event['id']
+		amount = float(purchase_event['amount'])
+		user = self.id_to_user[id]
+		friends_list = self.get_friends_list(id)
+		purchases = self.get_purchases(friends_list)
+		if len(purchases) >= 2:
+			amounts = [float(n) for _, _, n in purchases]
+			avg = np.mean(amounts)
+			std = np.std(amounts)
+			cutoff = avg + 3 * std
+			if amount > cutoff:
+				return (avg, std)
+		return False
+
+
 
 class User:
 	def __init__(self, id):
-		self.id = id
-		self.friends = set() #id ints
-		self.purchases = []
+		self.id = id # int of user id
+		self.friends = set() # set of ints of friends' user ids
+		self.purchases = [] # list of tuples (timestamp, rank, amount)
 
 	def befriend(self, user):
 		self.friends.add(user)
@@ -213,7 +220,10 @@ class User:
 		self.friends.remove(user)
 
 	def purchase(self, timestamp, amount):
-		# new_purchase = Purchase(timestamp, id, amount)
+		# A purchase is stored as a tuple (timestamp, rank, amount).
+		# Timestamp and amount are taken from the original json event.
+		# Rank is used to break ties for events with the same timestamp.
+
 		ts = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 		ts = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 		if self.purchases:
