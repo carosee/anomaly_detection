@@ -1,5 +1,5 @@
 from datetime import datetime
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import numpy as np
 import heapq
 
@@ -88,7 +88,7 @@ class Social_Network:
 			user.purchase(timestamp, amount)
 			# update user object
 		else:
-			new_user = User(id)
+			new_user = User(id, self.t)
 			new_user.purchase(timestamp,amount)
 			self.id_to_user[id] = new_user
 			# create new user object and add to user map
@@ -104,14 +104,14 @@ class Social_Network:
 		'''
 		id1 = event_dict['id1']
 		id2 = event_dict['id2']
-		if id1 not in self.id_to_user: # user 1 not in user map
-			user1 = User(id1)
+		if id1 not in self.id_to_user:
+			user1 = User(id1, self.t)
 			self.id_to_user[id1] = user1
 		else:
 			user1 = self.id_to_user[id1]
 
 		if id2 not in self.id_to_user:
-			user2 = User(id2)
+			user2 = User(id2, self.t)
 			self.id_to_user[id2] = user2
 		else:
 			user2 = self.id_to_user[id2]
@@ -208,10 +208,11 @@ class Social_Network:
 
 
 class User:
-	def __init__(self, id):
+	def __init__(self, id, max_purchases):
 		self.id = id # int of user id
 		self.friends = set() # set of ints of friends' user ids
-		self.purchases = [] # list of tuples (timestamp, rank, amount)
+		self.purchases = deque(maxlen=max_purchases) # list of tuples (timestamp, rank, amount)
+		# self.purchases = []
 
 	def befriend(self, user):
 		self.friends.add(user)
@@ -223,8 +224,6 @@ class User:
 		# A purchase is stored as a tuple (timestamp, rank, amount).
 		# Timestamp and amount are taken from the original json event.
 		# Rank is used to break ties for events with the same timestamp.
-
-		ts = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 		ts = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 		if self.purchases:
 			last_purchase = self.purchases[-1]

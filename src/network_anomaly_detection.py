@@ -1,7 +1,7 @@
 import json
 import time
 import sys
-from anomaly_detection_classes import Social_Network, User
+from network_classes import Social_Network, User
 
 
 def main():
